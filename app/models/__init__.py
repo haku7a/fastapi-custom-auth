@@ -1,1 +1,1 @@
-from app.models.auth import Role
+from app.models.auth import Role, User
