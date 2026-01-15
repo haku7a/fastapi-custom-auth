@@ -5,6 +5,8 @@ UV and Docker are required
 
 ## Setup
 ```bash
+# Windows CMD -> 'copy .env.example .env'
+cp .env.example .env
 docker-compose up -d
 uv sync
 uv run alembic upgrade head
