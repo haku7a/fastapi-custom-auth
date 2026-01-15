@@ -4,8 +4,8 @@ from sqlalchemy import select
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.schemas.auth import UserRead, UserCreate, Token, UserLogin, UserUpdate
-from app.models.auth import User
-from app.db.deps import get_db, oauth2_scheme
+from app.models.auth import User, TokenBlocklist
+from app.db.deps import get_db, oauth2_scheme, get_current_user
 from app.core.security import (
     get_password_hash,
     verify_password,
@@ -82,83 +82,45 @@ async def login(
 
 
 @router.get("/me", response_model=UserRead)
-async def get_me(
-    db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)
-):
-    if not token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
-        )
-
-    email = decode_access_token(token)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        )
-
-    query = select(User).where(User.email == email)
-    result = await db.execute(query)
-    user = result.scalar_one_or_none()
-
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found"
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated"
-        )
-
-    return user
+async def get_me(current_user: User = Depends(get_current_user)):
+    return current_user
 
 
 @router.patch("/me", response_model=UserRead)
 async def update_me(
-    user_in: UserRead,
+    user_in: UserUpdate,
     db: AsyncSession = Depends(get_db),
-    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user),
 ):
-
-    email = decode_access_token(token)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        )
-
-    query = select(User).where(User.email == email)
-    result = await db.execute(query)
-    user = result.scalar_one_or_none()
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="User account is deactivated"
-        )
-
     update_data = user_in.model_dump(exclude_unset=True)
     for field, value in update_data.items():
-        setattr(user, field, value)
+        setattr(current_user, field, value)
 
     await db.commit()
-    await db.refresh(user)
-    return user
+    await db.refresh(current_user)
+    return current_user
 
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_me(
-    db: AsyncSession = Depends(get_db), token: str = Depends(oauth2_scheme)
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    token: str = Depends(oauth2_scheme),
 ):
-    email = decode_access_token(token)
-    if not email:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token"
-        )
-    query = select(User).where(User.email == email)
-    result = await db.execute(query)
-    user = result.scalar_one_or_none()
+    current_user.is_active = False
 
-    if user:
-        user.is_active = False
-        await db.commit()
+    blocked_token = TokenBlocklist(token=token)
+    db.add(blocked_token)
 
+    await db.commit()
     return None
+
+
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout(
+    token: str = Depends(oauth2_scheme), db: AsyncSession = Depends(get_db)
+):
+    blocked_token = TokenBlocklist(token=token)
+    db.add(blocked_token)
+    await db.commit()
+    return {"message": "Successfully logged out"}
