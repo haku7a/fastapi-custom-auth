@@ -45,6 +45,6 @@ class UserLogin(BaseModel):
     password: str
 
 
-class UserUpdate:
+class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, min_length=1, max_length=255)
     email: Optional[EmailStr] = None
