@@ -1,6 +1,7 @@
 from sqlalchemy import String, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.base_class import Base
+from datetime import datetime
 
 
 class Role(Base):
@@ -55,3 +56,11 @@ class AccessRule(Base):
 
     role: Mapped["Role"] = relationship(back_populates="rules")
     element: Mapped["BusinessElement"] = relationship()
+
+
+class TokenBlocklist(Base):
+    __tablename__ = "token_blocklist"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    token: Mapped[str] = mapped_column(String, unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=datetime.utcnow)
