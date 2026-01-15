@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 from pwdlib import PasswordHash
 from pwdlib.hashers.argon2 import Argon2Hasher
 import jwt
+from typing import Optional
 
 from app.core.config import settings
 
@@ -27,3 +28,13 @@ def create_access_token(data: dict) -> str:
         to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM
     )
     return encoded_jwt
+
+
+def decode_access_token(token: str) -> Optional[str]:
+    try:
+        payload = jwt.decode(
+            token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM]
+        )
+        return payload.get("sub")
+    except (jwt.PyJWKError, AttributeError):
+        return None
